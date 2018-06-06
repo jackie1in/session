@@ -36,7 +36,7 @@ func (s *Session) Rollback() error {
 	return nil
 }
 
-// Commit 提交事务：如果提交事务的方法和开启事务的方法在一个函数栈内，则提交事务，否则，不提交
+// Commit 提交事务：如果提交事务的函数和开启事务的函数在一个函数栈内，则提交事务，否则，不提交
 func (s *Session) Commit() error {
 	if s.Tx != nil {
 		pc, _, _, _ := runtime.Caller(1)
@@ -59,7 +59,7 @@ func (s *Session) Exec(query string, args ...interface{}) (sql.Result, error) {
 	return s.DB.Exec(query, args...)
 }
 
-// QueryRow 查询单条数据，始终以非事务方式执行
+// QueryRow 查询单条数据，始终以非事务方式执行（查询都已非事务方式执行）
 func (s *Session) QueryRow(query string, args ...interface{}) *sql.Row {
 	return s.Tx.QueryRow(query, args...)
 }

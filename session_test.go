@@ -120,3 +120,16 @@ func TestDoNestingTx(t *testing.T) {
 
 	UserService.Commit()
 }
+
+func Do(session *Session) {
+	session.Begin()                // 开启事务
+	func(session *Session) {
+		session.Begin()            // 事务已经开启，不进行操作
+		func(session *Session) {
+			session.Begin()        // 事务已经开启，不进行操作
+			session.Commit()       // 提交事务与开启事务不在一个函数中，不进行操作
+		}(session)
+		session.Commit()           // 提交事务与开启事务不在一个函数中，不进行操作
+	}(session)
+	session.Commit()               // 提交事务与开启事务不在一个函数中，提交事务
+}
