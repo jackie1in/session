@@ -21,7 +21,7 @@ func Do(session *Session) {
 		}(session)          
 		session.Commit()           // 提交事务与开启事务不在一个函数中，不进行操作
 	}(session)
-	session.Commit()               // 提交事务与开启事务不在一个函数中，提交事务
+	session.Commit()               // 提交事务与开启事务在一个函数中，提交事务
 }
 ```
 
