@@ -32,6 +32,7 @@ func (s *Session) Begin() error {
 func (s *Session) Rollback() error {
 	if s.Tx != nil {
 		return s.Tx.Rollback()
+		s.Tx=nil
 	}
 	return nil
 }
@@ -46,6 +47,7 @@ func (s *Session) Commit() error {
 			if err != nil {
 				return err
 			}
+			s.Tx=nil
 		}
 	}
 	return nil

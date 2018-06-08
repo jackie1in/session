@@ -101,3 +101,4 @@ func (s *Session) Query(query string, args ...interface{}) (*sql.Rows, error) {
 
 ```
 
+GitHub:https://github.com/alberliu/session

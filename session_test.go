@@ -16,7 +16,6 @@ func init() {
 		fmt.Println(err)
 		panic(err)
 	}
-	UserService = userService{Session{DB: db}}
 }
 
 type User struct {
@@ -26,7 +25,9 @@ type User struct {
 	sex    int
 }
 
-var UserService userService
+func UserService() *userService{
+	return &userService{Session{DB: db}}
+}
 
 type userService struct {
 	Session
@@ -64,63 +65,83 @@ func (s *userService) Add(user1, user2 User) error {
 	return nil
 }
 
-// TestDo 测试非事务方式
-func TestDo(t *testing.T) {
-	user, err := UserService.Get("1")
+// Do 事务
+func (s *userService)Do() {
+	user, err := s.Get("1")
 	if err != nil {
 		fmt.Println(err)
 	}
 
 	fmt.Println(user)
 
-	err = UserService.Insert(User{number: "1", name: "1", ege: 1, sex: 1})
+	err = s.Insert(User{number: "1", name: "1", ege: 1, sex: 1})
 	if err != nil {
 		fmt.Println(err)
 	}
+}
+
+// DoTx 事务
+func (s *userService)DoTx() {
+	err := s.Begin()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	user, err := s.Get("1")
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println(user)
+
+	err = s.Insert(User{number: "1", name: "1", ege: 1, sex: 1})
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	s.Commit()
+}
+
+// DoNestingTx 嵌套事务
+func (s *userService)DoNestingTx() {
+
+	err := s.Begin()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	err = s.Insert(User{number: "1", name: "1", ege: 1, sex: 1})
+	if err != nil {
+		s.Rollback()
+	}
+
+	err = s.Add(User{number: "1", name: "1", ege: 1, sex: 1}, User{number: "1", name: "1", ege: 1, sex: 1})
+	if err != nil {
+		s.Rollback()
+	}
+
+	s.Commit()
+}
+
+// TestDo 测试非事务方式
+func TestDo(t *testing.T) {
+	userService :=UserService()
+	userService.Do()
 }
 
 // TestDoTx 测试事务方式
 func TestDoTx(t *testing.T) {
-	err := UserService.Begin()
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	user, err := UserService.Get("1")
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	fmt.Println(user)
-
-	err = UserService.Insert(User{number: "1", name: "1", ege: 1, sex: 1})
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	UserService.Commit()
+	userService :=UserService()
+	userService.DoTx()
 }
 
 // TestDoNestingTx 测试嵌套事务
 func TestDoNestingTx(t *testing.T) {
-	err := UserService.Begin()
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	err = UserService.Insert(User{number: "1", name: "1", ege: 1, sex: 1})
-	if err != nil {
-		UserService.Rollback()
-	}
-
-	err = UserService.Add(User{number: "1", name: "1", ege: 1, sex: 1}, User{number: "1", name: "1", ege: 1, sex: 1})
-	if err != nil {
-		UserService.Rollback()
-	}
-
-	UserService.Commit()
+	userService:=userService{}
+	userService.DoNestingTx()
 }
 
+// Do 解释
 func Do(session *Session) {
 	session.Begin()                // 开启事务
 	func(session *Session) {
