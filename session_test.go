@@ -123,6 +123,35 @@ func (s *userService)DoNestingTx() {
 	s.Commit()
 }
 
+// DoNestingTx 嵌套事务
+func DoNoNestingTx() {
+	tx,err := db.Begin()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	user:=User{number: "1", name: "1", ege: 1, sex: 1}
+	_, err = tx.Exec("insert into user(number,name,ege,sex) values(?,?,?,?)",
+		user.number, user.name, user.ege, user.sex)
+	if err != nil {
+		tx.Rollback()
+	}
+
+	_, err = tx.Exec("insert into user(number,name,ege,sex) values(?,?,?,?)",
+		user.number, user.name, user.ege, user.sex)
+	if err != nil {
+		tx.Rollback()
+	}
+
+	_, err = tx.Exec("insert into user(number,name,ege,sex) values(?,?,?,?)",
+		user.number, user.name, user.ege, user.sex)
+	if err != nil {
+		tx.Rollback()
+	}
+
+	tx.Commit()
+}
+
 // TestDo 测试非事务方式
 func TestDo(t *testing.T) {
 	userService :=UserService()
@@ -137,10 +166,22 @@ func TestDoTx(t *testing.T) {
 
 // TestDoNestingTx 测试嵌套事务
 func TestDoNestingTx(t *testing.T) {
-	userService:=userService{}
+	userService:=UserService()
 	userService.DoNestingTx()
 }
 
+func BenchmarkDoNestingTx(b *testing.B) {
+	for i:=0;i<b.N;i++{
+		userService:=UserService()
+		userService.DoNestingTx()
+	}
+}
+
+func BenchmarkNoDoNestingTx(b *testing.B) {
+	for i:=0;i<b.N;i++{
+		DoNoNestingTx()
+	}
+}
 // Do 解释
 func Do(session *Session) {
 	session.Begin()                // 开启事务

@@ -61,7 +61,7 @@ func (s *Session) Exec(query string, args ...interface{}) (sql.Result, error) {
 	return s.DB.Exec(query, args...)
 }
 
-// QueryRow 查询单条数据，始终以非事务方式执行（查询都已非事务方式执行）
+// QueryRow 查询单条数据，始终以非事务方式执行（查询都以非事务方式执行）
 func (s *Session) QueryRow(query string, args ...interface{}) *sql.Row {
 	return s.Tx.QueryRow(query, args...)
 }
