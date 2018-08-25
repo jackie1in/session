@@ -2,8 +2,9 @@ package session
 
 import (
 	"database/sql"
-	"runtime"
-)
+	)
+
+const beginStatus = 1
 
 // Session 会话工厂
 type SessionFactory struct {
@@ -30,12 +31,13 @@ func (sf *SessionFactory) GetSession() *Session {
 
 // Session 会话
 type Session struct {
-	db *sql.DB
-	tx *sql.Tx
-	f  *runtime.Func
+	db       *sql.DB
+	tx       *sql.Tx
+	sign     int8
+	snapshot int8
 }
 
-// Begin 开启事务：如果已经开启，则对事务不进行任何操作
+// Begin 开启事务，如果事务没有开启，开启事务；如果事务已经开启，对事务不做任何操作
 func (s *Session) Begin() error {
 	if s.tx == nil {
 		tx, err := s.db.Begin()
@@ -43,19 +45,25 @@ func (s *Session) Begin() error {
 			return err
 		}
 		s.tx = tx
-
-		// 记录下首次开启事务的函数
-		pc, _, _, _ := runtime.Caller(1)
-		s.f = runtime.FuncForPC(pc)
+		s.sign = beginStatus
+		return nil
 	}
+	s.sign++
+	s.snapshot = s.sign
 	return nil
 }
 
 // Rollback 回滚事务
 func (s *Session) Rollback() error {
 	if s.tx != nil {
-		return s.tx.Rollback()
-		s.tx = nil
+		if s.sign == s.snapshot {
+			err:= s.tx.Rollback()
+			if err!=nil{
+				return err
+			}
+			s.tx = nil
+			return nil
+		}
 	}
 	return nil
 }
@@ -63,15 +71,17 @@ func (s *Session) Rollback() error {
 // Commit 提交事务：如果提交事务的函数和开启事务的函数在一个函数栈内，则提交事务，否则，不提交
 func (s *Session) Commit() error {
 	if s.tx != nil {
-		pc, _, _, _ := runtime.Caller(1)
-		f := runtime.FuncForPC(pc)
-		if s.f == f {
+		if s.sign == beginStatus {
 			err := s.tx.Commit()
 			if err != nil {
 				return err
 			}
 			s.tx = nil
+			return nil
+		} else {
+			s.sign--
 		}
+		return nil
 	}
 	return nil
 }
@@ -94,7 +104,7 @@ func (s *Session) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	return s.db.Query(query, args...)
 }
 
-// Prepare 预执行
+// Prepare 预执行，如果已经开启事务，就以事务方式执行，如果没有开启事务，就以非事务方式执行
 func (s *Session) Prepare(query string) (*sql.Stmt, error) {
 	if s.tx != nil {
 		return s.tx.Prepare(query)

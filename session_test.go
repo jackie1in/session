@@ -4,14 +4,13 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"testing"
 	"fmt"
-	"database/sql"
-)
+	)
 
-var db *sql.DB
+var sf *SessionFactory
 
 func init() {
 	var err error
-	db, err = sql.Open("mysql", "root:Liu123456@tcp(localhost:3306)/test?charset=utf8")
+	sf, err = NewSessionFactory("mysql", "root:Liu123456@tcp(localhost:3306)/test?charset=utf8")
 	if err != nil {
 		fmt.Println(err)
 		panic(err)
@@ -19,54 +18,58 @@ func init() {
 }
 
 type User struct {
-	number string
+	mobile string
 	name   string
-	ege    int
+	age    int
 	sex    int
 }
 
-func UserService() *userService{
-	return &userService{Session{DB: db}}
+type UserService struct {
+	session *Session
 }
 
-type userService struct {
-	Session
+func NewUserService() *UserService {
+	return &UserService{sf.GetSession()}
 }
 
-func (s *userService) Insert(user User) error {
-	_, err := s.Exec("insert into user(number,name,ege,sex) values(?,?,?,?)",
-		user.number, user.name, user.ege, user.sex)
+func (s *UserService) Insert(user User) error {
+	_, err := s.session.Exec("insert into user(mobile,name,age,sex) values(?,?,?,?)",
+		user.mobile, user.name, user.age, user.sex)
 	return err
 }
 
-func (s *userService) Get(number string) (*User, error) {
-	row := db.QueryRow("select number,name,ege,sex from user where number = ?", number)
+func (s *UserService) Get(mobile string) (*User, error) {
+	row := s.session.QueryRow("select mobile,name,age,sex from user where mobile = ?", mobile)
 	user := new(User)
-	err := row.Scan(&user.number, &user.name, &user.ege, &user.sex)
+	err := row.Scan(&user.mobile, &user.name, &user.age, &user.sex)
 	return user, err
 }
 
-func (s *userService) Add(user1, user2 User) error {
-	s.Begin()
-
-	err := s.Insert(user1)
+func (s *UserService) AddInTx(user1, user2 User) error {
+	err:=s.session.Begin()
 	if err != nil {
-		s.Rollback()
+		return err
+	}
+	defer s.session.Rollback()
+
+	err = s.Insert(user1)
+	if err != nil {
+		fmt.Println(err)
 		return err
 	}
 
 	err = s.Insert(user2)
 	if err != nil {
-		s.Rollback()
+		fmt.Println(err)
 		return err
 	}
 
-	s.Commit()
+	// s.session.Commit()
 	return nil
 }
 
 // Do 事务
-func (s *userService)Do() {
+func (s *UserService)Do() {
 	user, err := s.Get("1")
 	if err != nil {
 		fmt.Println(err)
@@ -74,18 +77,19 @@ func (s *userService)Do() {
 
 	fmt.Println(user)
 
-	err = s.Insert(User{number: "1", name: "1", ege: 1, sex: 1})
+	err = s.Insert(User{mobile: "1", name: "1", age: 1, sex: 1})
 	if err != nil {
 		fmt.Println(err)
 	}
 }
 
 // DoTx 事务
-func (s *userService)DoTx() {
-	err := s.Begin()
+func (s *UserService)DoTx() {
+	err := s.session.Begin()
 	if err != nil {
 		fmt.Println(err)
 	}
+	defer s.session.Rollback()
 
 	user, err := s.Get("1")
 	if err != nil {
@@ -94,87 +98,96 @@ func (s *userService)DoTx() {
 
 	fmt.Println(user)
 
-	err = s.Insert(User{number: "1", name: "1", ege: 1, sex: 1})
+	err = s.Insert(User{mobile: "1", name: "1", age: 1, sex: 1})
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	s.Commit()
+	s.session.Commit()
 }
 
 // DoNestingTx 嵌套事务
-func (s *userService)DoNestingTx() {
-
-	err := s.Begin()
+func (s *UserService)DoNestingTx() {
+	err := s.session.Begin()
 	if err != nil {
 		fmt.Println(err)
 	}
+	defer s.session.Rollback()
 
-	err = s.Insert(User{number: "1", name: "1", ege: 1, sex: 1})
-	if err != nil {
-		s.Rollback()
-	}
-
-	err = s.Add(User{number: "1", name: "1", ege: 1, sex: 1}, User{number: "1", name: "1", ege: 1, sex: 1})
-	if err != nil {
-		s.Rollback()
-	}
-
-	s.Commit()
-}
-
-// DoNestingTx 嵌套事务
-func DoNoNestingTx() {
-	tx,err := db.Begin()
+	err = s.Insert(User{mobile: "1", name: "1", age: 1, sex: 1})
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
 
-	user:=User{number: "1", name: "1", ege: 1, sex: 1}
-	_, err = tx.Exec("insert into user(number,name,ege,sex) values(?,?,?,?)",
-		user.number, user.name, user.ege, user.sex)
+	err = s.AddInTx(User{mobile: "1", name: "1", age: 1, sex: 1}, User{mobile: "1", name: "1", age: 1, sex: 1})
 	if err != nil {
-		tx.Rollback()
+		fmt.Println(err)
+		return
 	}
 
-	_, err = tx.Exec("insert into user(number,name,ege,sex) values(?,?,?,?)",
-		user.number, user.name, user.ege, user.sex)
-	if err != nil {
-		tx.Rollback()
+	err=s.session.Commit()
+	if err!=nil{
+		fmt.Println(err)
+		return
 	}
-
-	_, err = tx.Exec("insert into user(number,name,ege,sex) values(?,?,?,?)",
-		user.number, user.name, user.ege, user.sex)
-	if err != nil {
-		tx.Rollback()
-	}
-
-	tx.Commit()
 }
+
+
 
 // TestDo 测试非事务方式
 func TestDo(t *testing.T) {
-	userService :=UserService()
+	userService :=NewUserService()
 	userService.Do()
 }
 
 // TestDoTx 测试事务方式
 func TestDoTx(t *testing.T) {
-	userService :=UserService()
+	userService :=NewUserService()
 	userService.DoTx()
 }
 
 // TestDoNestingTx 测试嵌套事务
 func TestDoNestingTx(t *testing.T) {
-	userService:=UserService()
+	userService:=NewUserService()
 	userService.DoNestingTx()
 }
 
+
 func BenchmarkDoNestingTx(b *testing.B) {
 	for i:=0;i<b.N;i++{
-		userService:=UserService()
+		userService:=NewUserService()
 		userService.DoNestingTx()
 	}
+}
+
+// DoNestingTx 原生事务方法
+func DoNoNestingTx() {
+	tx,err := sf.DB.Begin()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	user:=User{mobile: "1", name: "1", age: 1, sex: 1}
+	_, err = tx.Exec("insert into user(mobile,name,age,sex) values(?,?,?,?)",
+		user.mobile, user.name, user.age, user.sex)
+	if err != nil {
+		tx.Rollback()
+	}
+
+	_, err = tx.Exec("insert into user(mobile,name,age,sex) values(?,?,?,?)",
+		user.mobile, user.name, user.age, user.sex)
+	if err != nil {
+		tx.Rollback()
+	}
+
+	_, err = tx.Exec("insert into user(mobile,name,age,sex) values(?,?,?,?)",
+		user.mobile, user.name, user.age, user.sex)
+	if err != nil {
+		tx.Rollback()
+	}
+
+	tx.Commit()
 }
 
 func BenchmarkNoDoNestingTx(b *testing.B) {
