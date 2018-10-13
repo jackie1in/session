@@ -2,16 +2,24 @@ package session
 
 import (
 	"database/sql"
-	)
+)
 
 const beginStatus = 1
 
-// Session 会话工厂
+// SessionFactory 会话工厂
 type SessionFactory struct {
 	*sql.DB
 }
 
-// NewSession 创建一个Session
+// Session 会话
+type Session struct {
+	db           *sql.DB // 原生db
+	tx           *sql.Tx // 原生事务
+	commitSign   int8    // 提交标记，控制是否提交事务
+	rollbackSign bool    // 回滚标记，控制是否回滚事务
+}
+
+// NewSessionFactory 创建一个会话工厂
 func NewSessionFactory(driverName, dataSourseName string) (*SessionFactory, error) {
 	db, err := sql.Open(driverName, dataSourseName)
 	if err != nil {
@@ -22,56 +30,47 @@ func NewSessionFactory(driverName, dataSourseName string) (*SessionFactory, erro
 	return factory, nil
 }
 
-// NewSession 创建一个Session
+// GetSession 获取一个Session
 func (sf *SessionFactory) GetSession() *Session {
 	session := new(Session)
 	session.db = sf.DB
 	return session
 }
 
-// Session 会话
-type Session struct {
-	db       *sql.DB
-	tx       *sql.Tx
-	sign     int8
-	snapshot int8
-}
-
 // Begin 开启事务，如果事务没有开启，开启事务；如果事务已经开启，对事务不做任何操作
 func (s *Session) Begin() error {
+	s.rollbackSign = true
 	if s.tx == nil {
 		tx, err := s.db.Begin()
 		if err != nil {
 			return err
 		}
 		s.tx = tx
-		s.sign = beginStatus
+		s.commitSign = beginStatus
 		return nil
 	}
-	s.sign++
-	s.snapshot = s.sign
+	s.commitSign++
 	return nil
 }
 
 // Rollback 回滚事务
 func (s *Session) Rollback() error {
-	if s.tx != nil {
-		if s.sign == s.snapshot {
-			err:= s.tx.Rollback()
-			if err!=nil{
-				return err
-			}
-			s.tx = nil
-			return nil
+	if s.tx != nil && s.rollbackSign == true {
+		err := s.tx.Rollback()
+		if err != nil {
+			return err
 		}
+		s.tx = nil
+		return nil
 	}
 	return nil
 }
 
 // Commit 提交事务：如果提交事务的函数和开启事务的函数在一个函数栈内，则提交事务，否则，不提交
 func (s *Session) Commit() error {
+	s.rollbackSign = false
 	if s.tx != nil {
-		if s.sign == beginStatus {
+		if s.commitSign == beginStatus {
 			err := s.tx.Commit()
 			if err != nil {
 				return err
@@ -79,7 +78,7 @@ func (s *Session) Commit() error {
 			s.tx = nil
 			return nil
 		} else {
-			s.sign--
+			s.commitSign--
 		}
 		return nil
 	}
@@ -96,11 +95,17 @@ func (s *Session) Exec(query string, args ...interface{}) (sql.Result, error) {
 
 // QueryRow 查询单条数据，始终以非事务方式执行（查询都以非事务方式执行）
 func (s *Session) QueryRow(query string, args ...interface{}) *sql.Row {
+	if s.tx != nil {
+		return s.tx.QueryRow(query, args...)
+	}
 	return s.db.QueryRow(query, args...)
 }
 
 // Query 查询数据，始终以非事务方式执行
 func (s *Session) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	if s.tx != nil {
+		return s.tx.Query(query, args...)
+	}
 	return s.db.Query(query, args...)
 }
 

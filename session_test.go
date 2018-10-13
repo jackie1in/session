@@ -4,7 +4,8 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"testing"
 	"fmt"
-	)
+	"errors"
+)
 
 var sf *SessionFactory
 
@@ -46,7 +47,7 @@ func (s *UserService) Get(mobile string) (*User, error) {
 }
 
 func (s *UserService) AddInTx(user1, user2 User) error {
-	err:=s.session.Begin()
+	err := s.session.Begin()
 	if err != nil {
 		return err
 	}
@@ -58,18 +59,20 @@ func (s *UserService) AddInTx(user1, user2 User) error {
 		return err
 	}
 
+	return errors.New("err")
+
 	err = s.Insert(user2)
 	if err != nil {
 		fmt.Println(err)
 		return err
 	}
 
-	// s.session.Commit()
+	s.session.Commit()
 	return nil
 }
 
 // Do 事务
-func (s *UserService)Do() {
+func (s *UserService) Do() {
 	user, err := s.Get("1")
 	if err != nil {
 		fmt.Println(err)
@@ -84,7 +87,7 @@ func (s *UserService)Do() {
 }
 
 // DoTx 事务
-func (s *UserService)DoTx() {
+func (s *UserService) DoTx() {
 	err := s.session.Begin()
 	if err != nil {
 		fmt.Println(err)
@@ -107,7 +110,7 @@ func (s *UserService)DoTx() {
 }
 
 // DoNestingTx 嵌套事务
-func (s *UserService)DoNestingTx() {
+func (s *UserService) DoNestingTx() {
 	err := s.session.Begin()
 	if err != nil {
 		fmt.Println(err)
@@ -126,85 +129,84 @@ func (s *UserService)DoNestingTx() {
 		return
 	}
 
-	err=s.session.Commit()
-	if err!=nil{
+	err = s.session.Commit()
+	if err != nil {
 		fmt.Println(err)
 		return
 	}
 }
 
-
-
 // TestDo 测试非事务方式
 func TestDo(t *testing.T) {
-	userService :=NewUserService()
+	userService := NewUserService()
 	userService.Do()
 }
 
 // TestDoTx 测试事务方式
 func TestDoTx(t *testing.T) {
-	userService :=NewUserService()
+	userService := NewUserService()
 	userService.DoTx()
 }
 
 // TestDoNestingTx 测试嵌套事务
 func TestDoNestingTx(t *testing.T) {
-	userService:=NewUserService()
+	userService := NewUserService()
 	userService.DoNestingTx()
 }
 
-
 func BenchmarkDoNestingTx(b *testing.B) {
-	for i:=0;i<b.N;i++{
-		userService:=NewUserService()
+	for i := 0; i < b.N; i++ {
+		userService := NewUserService()
 		userService.DoNestingTx()
 	}
 }
 
 // DoNestingTx 原生事务方法
 func DoNoNestingTx() {
-	tx,err := sf.DB.Begin()
+	tx, err := sf.DB.Begin()
 	if err != nil {
 		fmt.Println(err)
 	}
+	defer tx.Rollback()
 
-	user:=User{mobile: "1", name: "1", age: 1, sex: 1}
+	user := User{mobile: "1", name: "1", age: 1, sex: 1}
 	_, err = tx.Exec("insert into user(mobile,name,age,sex) values(?,?,?,?)",
 		user.mobile, user.name, user.age, user.sex)
 	if err != nil {
-		tx.Rollback()
+		return
 	}
 
 	_, err = tx.Exec("insert into user(mobile,name,age,sex) values(?,?,?,?)",
 		user.mobile, user.name, user.age, user.sex)
 	if err != nil {
-		tx.Rollback()
+		return
 	}
 
 	_, err = tx.Exec("insert into user(mobile,name,age,sex) values(?,?,?,?)",
 		user.mobile, user.name, user.age, user.sex)
 	if err != nil {
-		tx.Rollback()
+		return
 	}
 
 	tx.Commit()
 }
 
 func BenchmarkNoDoNestingTx(b *testing.B) {
-	for i:=0;i<b.N;i++{
+	for i := 0; i < b.N; i++ {
 		DoNoNestingTx()
 	}
 }
+
 // Do 解释
 func Do(session *Session) {
-	session.Begin()                // 开启事务
+	session.Begin() // 开启事务
 	func(session *Session) {
-		session.Begin()            // 事务已经开启，不进行操作
+		session.Begin() // 事务已经开启，不进行操作
 		func(session *Session) {
-			session.Begin()        // 事务已经开启，不进行操作
-			session.Commit()       // 提交事务与开启事务不在一个函数中，不进行操作
+			session.Begin()  // 事务已经开启，不进行操作
+			session.Commit() // 提交事务与开启事务不在一个函数中，不进行操作
 		}(session)
-		session.Commit()           // 提交事务与开启事务不在一个函数中，不进行操作
+		session.Commit() // 提交事务与开启事务不在一个函数中，不进行操作
 	}(session)
-	session.Commit()               // 提交事务与开启事务在一个函数中，提交事务
+	session.Commit() // 提交事务与开启事务在一个函数中，提交事务
 }
