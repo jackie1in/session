@@ -13,7 +13,7 @@ type SessionFactory struct {
 
 // Session 会话
 type Session struct {
-	db           *sql.DB // 原生db
+	DB           *sql.DB // 原生db
 	tx           *sql.Tx // 原生事务
 	commitSign   int8    // 提交标记，控制是否提交事务
 	rollbackSign bool    // 回滚标记，控制是否回滚事务
@@ -33,7 +33,7 @@ func NewSessionFactory(driverName, dataSourseName string) (*SessionFactory, erro
 // GetSession 获取一个Session
 func (sf *SessionFactory) GetSession() *Session {
 	session := new(Session)
-	session.db = sf.DB
+	session.DB = sf.DB
 	return session
 }
 
@@ -41,7 +41,7 @@ func (sf *SessionFactory) GetSession() *Session {
 func (s *Session) Begin() error {
 	s.rollbackSign = true
 	if s.tx == nil {
-		tx, err := s.db.Begin()
+		tx, err := s.DB.Begin()
 		if err != nil {
 			return err
 		}
@@ -90,7 +90,7 @@ func (s *Session) Exec(query string, args ...interface{}) (sql.Result, error) {
 	if s.tx != nil {
 		return s.tx.Exec(query, args...)
 	}
-	return s.db.Exec(query, args...)
+	return s.DB.Exec(query, args...)
 }
 
 // QueryRow 如果已经开启事务，就以事务方式执行，如果没有开启事务，就以非事务方式执行
@@ -98,7 +98,7 @@ func (s *Session) QueryRow(query string, args ...interface{}) *sql.Row {
 	if s.tx != nil {
 		return s.tx.QueryRow(query, args...)
 	}
-	return s.db.QueryRow(query, args...)
+	return s.DB.QueryRow(query, args...)
 }
 
 // Query 查询数据，如果已经开启事务，就以事务方式执行，如果没有开启事务，就以非事务方式执行
@@ -106,7 +106,7 @@ func (s *Session) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	if s.tx != nil {
 		return s.tx.Query(query, args...)
 	}
-	return s.db.Query(query, args...)
+	return s.DB.Query(query, args...)
 }
 
 // Prepare 预执行，如果已经开启事务，就以事务方式执行，如果没有开启事务，就以非事务方式执行
@@ -114,5 +114,5 @@ func (s *Session) Prepare(query string) (*sql.Stmt, error) {
 	if s.tx != nil {
 		return s.tx.Prepare(query)
 	}
-	return s.db.Prepare(query)
+	return s.DB.Prepare(query)
 }
